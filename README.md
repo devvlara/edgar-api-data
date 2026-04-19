@@ -53,14 +53,6 @@ User-Agent: Your Name your.email@example.com
 
 See [`docs/edgar-api-exploration.md`](docs/edgar-api-exploration.md) for a complete tour of the endpoints and [`docs/edgar-api-data-dictionary.md`](docs/edgar-api-data-dictionary.md) for field-level details.
 
-## Status
-
-- [x] Endpoint exploration & reference guide
-- [x] Field-level data dictionary (markdown + xlsx)
-- [x] Entity-relationship diagram + suggested schema
-- [ ] Python client module (`src/edgar_client.py`)
-- [ ] First analysis notebook
-- [ ] Database loader
 
 ## References
 
