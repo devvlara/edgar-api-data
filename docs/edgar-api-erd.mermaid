@@ -1,0 +1,144 @@
+---
+title: SEC EDGAR API — Entity Relationship Diagram
+---
+erDiagram
+    FILER ||--o{ TICKER           : "has"
+    FILER ||--o{ FILING           : "submits"
+    FILER ||--o{ ADDRESS          : "registered_at"
+    FILER ||--o{ FORMER_NAME      : "previously_known_as"
+    FILER ||--o{ XBRL_FACT        : "reports"
+    FILER }o--o| SIC_CODE         : "classified_as"
+
+    TICKER }o--o| EXCHANGE        : "listed_on"
+
+    FILING }o--|| FORM_TYPE       : "of_type"
+    FILING ||--o{ ITEM_8K         : "triggered_by"
+    FILING ||--|{ FILING_DOCUMENT : "contains"
+    FILING ||--o{ XBRL_FACT       : "source_of"
+
+    XBRL_FACT }o--|| TAG          : "tagged_with"
+    XBRL_FACT }o--|| UNIT_OF_MEASURE : "expressed_in"
+    XBRL_FACT }o--o| FRAME        : "aligns_to"
+
+    TAG }o--|| TAXONOMY           : "defined_in"
+
+    FILER {
+        int cik PK "10-digit zero-padded when used in URLs"
+        string name "EDGAR conformed name"
+        string entityType "operating, investment, etc."
+        string sic_code FK "4-digit industry code"
+        string ein "Tax ID"
+        string category "filer category"
+        string fiscalYearEnd "MMDD"
+        string stateOfIncorporation "2-letter code"
+        string phone
+        int hasInsiderForOwner "0 or 1"
+        int hasInsiderForIssuer "0 or 1"
+    }
+
+    TICKER {
+        string ticker PK "uppercase symbol"
+        int cik FK
+        string exchange FK "Nasdaq, NYSE, etc."
+    }
+
+    EXCHANGE {
+        string name PK "Nasdaq, NYSE, OTC, ..."
+    }
+
+    SIC_CODE {
+        string code PK "4-digit industry code"
+        string description
+    }
+
+    ADDRESS {
+        int cik FK
+        string type "mailing or business"
+        string street1
+        string street2 "nullable"
+        string city
+        string stateOrCountry "US state or ISO country"
+        string zipCode
+    }
+
+    FORMER_NAME {
+        int cik FK
+        string name "prior legal name"
+        datetime fromDate "ISO datetime UTC"
+        datetime toDate "ISO datetime UTC"
+    }
+
+    FILING {
+        string accessionNumber PK "dashed format"
+        int cik FK
+        string form FK "10-K, 8-K, 4, etc."
+        date filingDate "accepted by EDGAR"
+        date reportDate "period of report"
+        datetime acceptanceDateTime "UTC"
+        string act "33 or 34"
+        string fileNumber "SEC file number"
+        string primaryDocument "filename in archive"
+        int isXBRL "0 or 1"
+        int isInlineXBRL "0 or 1"
+        int sizeBytes
+    }
+
+    FORM_TYPE {
+        string formCode PK "10-K, 10-Q, 8-K, 4, 13F-HR, ..."
+        string description
+    }
+
+    ITEM_8K {
+        string accessionNumber FK
+        string itemCode "e.g. 2.02, 5.02"
+        string description "trigger type"
+    }
+
+    FILING_DOCUMENT {
+        string accessionNumber FK
+        string filename PK "e.g. aapl-20240928.htm"
+        string docType "10-K, EX-99.1, XBRL, R1, ..."
+        int sizeBytes
+        datetime lastModified "ET"
+    }
+
+    XBRL_FACT {
+        string factId PK "surrogate: accn+tag+end+uom"
+        int cik FK
+        string taxonomy FK
+        string tag FK
+        string uom FK
+        string accession FK "source filing"
+        date startDate "null for instants"
+        date endDate "required"
+        number val "numeric value"
+        int fy "fiscal year"
+        string fp "FY, Q1, Q2, Q3"
+        string form "source form type"
+        date filed "filing date"
+        string frame FK "null if unaligned"
+    }
+
+    TAG {
+        string tagName PK "e.g. Revenues, Assets"
+        string taxonomy FK
+        string label "human-readable"
+        string description "full narrative"
+    }
+
+    TAXONOMY {
+        string code PK "us-gaap, dei, ifrs-full, srt"
+        string name
+    }
+
+    UNIT_OF_MEASURE {
+        string code PK "USD, shares, pure, USD/shares"
+        string description
+    }
+
+    FRAME {
+        string frameCode PK "CY2023Q4I, CY2023Q4, CY2023"
+        string periodType "duration or instant"
+        int year
+        int quarter "1-4, null for annual"
+    }

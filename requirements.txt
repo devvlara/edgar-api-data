@@ -1,0 +1,20 @@
+# Core HTTP client
+requests>=2.31.0
+
+# Data manipulation
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Excel / XBRL file handling
+openpyxl>=3.1.0
+
+# Notebook environment (optional — comment out if you don't want Jupyter)
+jupyter>=1.0.0
+ipykernel>=6.25.0
+
+# Plotting (you'll want these eventually)
+matplotlib>=3.7.0
+plotly>=5.17.0
+
+# Environment variable loading (for keeping your SEC User-Agent out of git)
+python-dotenv>=1.0.0
