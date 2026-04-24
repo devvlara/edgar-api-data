@@ -1,58 +1,85 @@
-# EDGAR API Data Project
+# EDGAR Financial Data Pipeline
 
-A data project built on the U.S. Securities and Exchange Commission's free, public [EDGAR API](https://www.sec.gov/search-filings/edgar-application-programming-interfaces). This repository is the exploration phase: documentation of every available endpoint, a field-level data dictionary, and an entity-relationship diagram of the underlying data model. Code and analyses will grow from here.
+Pulls company submissions and XBRL financial facts from the SEC's free, public [EDGAR API](https://www.sec.gov/search-filings/edgar-application-programming-interfaces) and loads them into a PostgreSQL database. The pipeline is fully resumable — any company already marked `loaded_at IS NOT NULL` is skipped on restart.
 
 ## What's in this repo
 
 ```
-edgar-api-data-project/
-├── README.md                 ← you are here
-├── .gitignore
-├── requirements.txt          ← Python dependencies
-├── GITHUB_SETUP.md           ← first-time setup walkthrough
-├── docs/                     ← reference documentation
-│   ├── edgar-api-exploration.md         narrative guide to the 10 endpoints
-│   ├── edgar-api-data-dictionary.md     field-level dictionary (markdown)
-│   ├── edgar-api-data-dictionary.xlsx   same dictionary as a 12-tab workbook
-│   ├── edgar-api-erd.md                 entity-relationship diagram + schema
-│   └── edgar-api-erd.mermaid            standalone Mermaid diagram source
-├── src/                      ← Python source code (packages/modules)
-├── notebooks/                ← Jupyter notebooks for exploration
-├── data/                     ← local data (gitignored — see .gitignore)
-│   ├── raw/                  ← raw API responses
-│   └── processed/            ← cleaned / transformed data
-└── tests/                    ← unit tests
+edgar/
+├── README.md
+├── requirements.txt
+├── .env                          ← local secrets (gitignored)
+├── src/
+│   ├── db.py                     ← DDL + upsert helpers
+│   ├── etl.py                    ← bulk ETL entry point
+│   ├── queries.py                ← query functions (tickers, company info, facts)
+│   └── tag_map.py                ← XBRL tag → standardized metric mapping
+├── edgar_docs/                   ← SEC EDGAR API reference (upstream docs)
+│   ├── edgar-api-data-dictionary.md
+│   ├── edgar-api-data-dictionary.xlsx
+│   ├── edgar-api-erd.md
+│   └── edgar-api-erd.mermaid
+└── my-docs/                      ← project schema docs
+    └── edgar-schema-erd.mermaid  ← PostgreSQL ERD for the edgar schema
 ```
 
-## Quick start
+## Database schema
+
+Four tables in the `edgar` PostgreSQL schema:
+
+| Table | Key | Description |
+|---|---|---|
+| `company` | `cik` | One row per SEC filer; `loaded_at` tracks ETL completion |
+| `ticker` | `ticker` | Trading symbols with exchange; FK → `company` |
+| `filing` | `accession_number` | 10-K / 10-Q filings since 2020; FK → `company` |
+| `financial_fact` | `id` (BIGSERIAL) | ~45 standardized metrics per company per period; unique on `(cik, metric, period_end, fiscal_period)` |
+
+See [my-docs/edgar-schema-erd.mermaid](my-docs/edgar-schema-erd.mermaid) for the full ERD.
+
+## Setup
 
 ```bash
-# 1. clone the repo
-git clone https://github.com/<your-username>/edgar-api-data-project.git
-cd edgar-api-data-project
-
-# 2. create and activate a virtual environment
 python3 -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
-
-# 3. install dependencies
+source venv/bin/activate
 pip install -r requirements.txt
-
-# 4. read the docs, then start exploring
-jupyter notebook notebooks/
 ```
 
-## Using the EDGAR API
+Create a `.env` file in the project root:
 
-The SEC requires every request to include a descriptive `User-Agent` header and limits traffic to **10 requests per second** per IP. Both rules are enforced at the edge — break either and you'll get a temporary block.
-
-Recommended header format:
 ```
-User-Agent: Your Name your.email@example.com
+SEC_USER_AGENT=Your Name your@email.com
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=your_db
+DB_USER=your_user
+DB_PASSWORD=your_password
 ```
 
-See [`docs/edgar-api-exploration.md`](docs/edgar-api-exploration.md) for a complete tour of the endpoints and [`docs/edgar-api-data-dictionary.md`](docs/edgar-api-data-dictionary.md) for field-level details.
+`SEC_USER_AGENT` is required by the SEC. Requests without it will be blocked.
 
+## Running the ETL
+
+```bash
+python -m src.etl
+```
+
+The script:
+1. Fetches the full EDGAR ticker universe (~10 k+ companies)
+2. Skips any CIK already marked loaded
+3. For each remaining company: upserts company metadata, tickers, 10-K/10-Q filings, and financial facts
+4. Resolves restatements by keeping the most recently filed value per `(period_end, fiscal_period)`
+
+## Metrics tracked
+
+`tag_map.py` maps ~45 standardized metric names to their XBRL tag fallback chains across three financial statements:
+
+- **Income statement** — revenue, gross profit, operating income, net income, EPS, share counts, etc.
+- **Balance sheet** — cash, receivables, inventory, total assets, debt, equity, etc.
+- **Cash flow** — operating/investing/financing cash flows, capex, buybacks, dividends, etc.
+
+## EDGAR API limits
+
+The SEC requires a descriptive `User-Agent` header and enforces a limit of **10 requests per second** per IP. The `SEC_USER_AGENT` env var is passed with every request.
 
 ## References
 
