@@ -1,0 +1,59 @@
+---
+title: SEC EDGAR — PostgreSQL Schema ERD (edgar)
+---
+erDiagram
+
+    %% ================================================================
+    %% SCHEMA: edgar
+    %% 4 tables — company, ticker, filing, financial_fact
+    %% ================================================================
+
+    COMPANY {
+        text        cik              PK  "SEC CIK identifier"
+        text        name                 "EDGAR conformed name — NOT NULL"
+        text        sic_code             "4-digit SIC code"
+        text        sic_description      "human-readable SIC label"
+        text        entity_type          "operating | investment | ..."
+        text        fiscal_year_end      "MMDD format, e.g. 0930"
+        text        state_of_incorp      "2-letter US state or ISO country"
+        text        category             "Large accelerated filer | ..."
+        timestamptz loaded_at            "set after full fact load"
+    }
+
+    TICKER {
+        text ticker    PK  "uppercase trading symbol"
+        text cik       FK  "references company(cik)"
+        text exchange      "Nasdaq | NYSE | OTC | ... (nullable)"
+    }
+
+    FILING {
+        text accession_number PK  "dashed format: 0000320193-24-000123"
+        text cik              FK  "references company(cik)"
+        text form_type            "10-K | 10-Q | 8-K | ... NOT NULL"
+        date period_end           "fiscal period end covered"
+        date filing_date          "date accepted by EDGAR"
+    }
+
+    FINANCIAL_FACT {
+        bigint  id               PK  "BIGSERIAL surrogate key"
+        text    cik              FK  "references company(cik)"
+        text    accession_number     "source filing (no FK constraint)"
+        text    metric               "standardized line-item name — NOT NULL"
+        text    xbrl_tag             "raw XBRL tag from filer"
+        numeric value                "reported value"
+        text    unit                 "USD | shares | pure | ..."
+        date    period_start         "null for instant (balance-sheet) facts"
+        date    period_end           "always present — NOT NULL"
+        text    period_type          "duration | instant"
+        int     fiscal_year          "fiscal year as reported"
+        text    fiscal_period        "FY | Q1 | Q2 | Q3"
+        date    filed_date           "use DESC to resolve restatements"
+    }
+
+    %% ================================================================
+    %% RELATIONSHIPS
+    %% ================================================================
+
+    COMPANY      ||--o{  TICKER          : "has"
+    COMPANY      ||--o{  FILING          : "submits"
+    COMPANY      ||--o{  FINANCIAL_FACT  : "reports"
