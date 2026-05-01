@@ -5,7 +5,9 @@ erDiagram
 
     %% ================================================================
     %% SCHEMA: edgar
-    %% 4 tables — company, ticker, filing, financial_fact
+    %% Company fundamentals: company, ticker, filing, financial_fact
+    %% Asset manager / 13F: investment_manager, manager_filing, holding
+    %% Cross-domain bridge: cusip_issuer_map (CUSIP ↔ CIK)
     %% ================================================================
 
     COMPANY {
@@ -50,10 +52,61 @@ erDiagram
         date    filed_date           "use DESC to resolve restatements"
     }
 
+    %% ── 13F tables ──────────────────────────────────────────────────
+
+    INVESTMENT_MANAGER {
+        text        cik       PK  "SEC CIK identifier"
+        text        name          "EDGAR conformed name — NOT NULL"
+        timestamptz loaded_at     "set after all 13F filings ingested"
+    }
+
+    MANAGER_FILING {
+        text    accession_number  PK  "dashed format — same namespace as filing"
+        text    cik               FK  "references investment_manager(cik)"
+        text    form_type             "13F-HR | 13F-HR/A | 13F-NT | 13F-NT/A — NOT NULL"
+        date    period_of_report      "calendar quarter-end covered (nullable)"
+        date    filing_date           "date accepted by EDGAR (nullable)"
+        boolean is_amendment          "TRUE for /A variants — NOT NULL DEFAULT FALSE"
+        text    amends_accession  FK  "self-ref to superseded filing (nullable)"
+        boolean is_superseded         "TRUE when a later filing covers same period — NOT NULL DEFAULT FALSE"
+    }
+
+    HOLDING {
+        bigint  id                          PK  "BIGSERIAL surrogate key"
+        text    accession_number            FK  "references manager_filing(accession_number)"
+        text    cusip                           "9-character CUSIP — NOT NULL"
+        text    ticker                      FK  "resolved at ingest via CUSIP→CIK→ticker; NULL if unresolved"
+        text    name_of_issuer                  "issuer name as reported (nullable)"
+        text    title_of_class                  "COM | warrant | preferred etc (nullable)"
+        bigint  value_usd                       "fair market value in THOUSANDS of USD (nullable)"
+        numeric shares_or_principal_amount      "quantity held (nullable)"
+        text    shares_or_principal_type        "SH (shares) | PRN (principal amount) (nullable)"
+    }
+
+    CUSIP_ISSUER_MAP {
+        text        cusip      PK  "9-character CUSIP"
+        text        cik        FK  "references company(cik) — NULL if unresolved"
+        text        source         "name_match | manual | third_party — NOT NULL"
+        timestamptz mapped_at      "timestamp of most recent resolution attempt — NOT NULL"
+    }
+
     %% ================================================================
     %% RELATIONSHIPS
     %% ================================================================
 
+    %% Existing relationships
     COMPANY      ||--o{  TICKER          : "has"
     COMPANY      ||--o{  FILING          : "submits"
     COMPANY      ||--o{  FINANCIAL_FACT  : "reports"
+
+    %% 13F relationships
+    INVESTMENT_MANAGER  ||--o{  MANAGER_FILING  : "files"
+    MANAGER_FILING      ||--o{  HOLDING         : "contains"
+    MANAGER_FILING      |o--o|  MANAGER_FILING  : "amends"
+
+    %% Cross-domain bridge (CUSIP ↔ company)
+    COMPANY             ||--o{  CUSIP_ISSUER_MAP : "identified_by"
+    HOLDING             }o--o|  CUSIP_ISSUER_MAP  : "resolved_via"
+
+    %% Ticker denormalized onto holding at ingest for query convenience
+    HOLDING             }o--o|  TICKER            : "resolves_to"
