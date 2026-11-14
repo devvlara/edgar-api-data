@@ -5,3 +5,4 @@ tqdm>=4.66
 streamlit>=1.32
 plotly>=5.20
 pandas>=2.0
+pyarrow>=15

@@ -21,6 +21,7 @@ Asset manager / 13F (etl_13f.py)
 from __future__ import annotations
 
 import gzip
+import re
 import time
 import threading
 from typing import Iterator
@@ -138,9 +139,9 @@ class EdgarClient:
         Fetches and parses company.gz from EDGAR's quarterly full-index at:
             /Archives/edgar/full-index/{year}/QTR{quarter}/company.gz
 
-        company.gz format: pipe-delimited, header line then a separator line of
-        dashes, then data rows:
-            Company Name|Form Type|CIK|Date Filed|Filename
+        company.gz format: fixed-width columns separated by 2+ spaces, with a
+        metadata preamble, one header row, a dashes separator, then data rows:
+            Company Name    Form Type    CIK    Date Filed    File Name
 
         Only rows whose Form Type is in {13F-HR, 13F-HR/A, 13F-NT, 13F-NT/A}
         are yielded. All other form types are discarded during parsing.
@@ -148,7 +149,6 @@ class EdgarClient:
         url = f"{_BASE_WWW}/Archives/edgar/full-index/{year}/QTR{quarter}/company.gz"
         raw = gzip.decompress(self._get(url).content).decode("latin-1")
 
-        col_map: dict[str, int] = {}
         in_data = False
 
         for line in raw.splitlines():
@@ -159,34 +159,23 @@ class EdgarClient:
                 in_data = True
                 continue
             if not in_data:
-                if "|" in stripped:
-                    col_map = {
-                        c.strip().lower(): i
-                        for i, c in enumerate(stripped.split("|"))
-                    }
                 continue
 
-            parts = stripped.split("|")
-            # Positional fallbacks match the documented column order in case
-            # the header line is absent or uses unexpected column names.
-            ni = col_map.get("company name", 0)
-            fi = col_map.get("form type",    1)
-            ci = col_map.get("cik",          2)
-            di = col_map.get("date filed",   3)
-            pi = col_map.get("filename",     4)
-
-            if len(parts) <= max(ni, fi, ci, di, pi):
+            # Fixed-width columns are separated by 2+ spaces. Splitting on
+            # multi-space preserves single-space words in company names.
+            parts = re.split(r"\s{2,}", stripped)
+            if len(parts) < 5:
                 continue
-            form = parts[fi].strip()
+            form = parts[1]
             if form not in _13F_FORMS:
                 continue
-            cik_raw = parts[ci].strip()
+            cik_raw = parts[2]
             if not cik_raw.isdigit():
                 continue
             yield {
-                "company_name": parts[ni].strip(),
+                "company_name": parts[0],
                 "form_type":    form,
                 "cik":          str(int(cik_raw)).zfill(10),
-                "date_filed":   parts[di].strip(),
-                "filename":     parts[pi].strip(),
+                "date_filed":   parts[3],
+                "filename":     parts[4],
             }
